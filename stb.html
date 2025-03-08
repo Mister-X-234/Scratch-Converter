@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scratch to Blueprint Converter</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            height: 100vh;
+            overflow: hidden; /* Evite le double défilement */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .container {
+            text-align: center;
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            width: 90%;
+            max-width: 800px;
+            height: 90vh;
+            overflow-y: auto; /* Permet le défilement vertical dans le conteneur */
+        }
+        .file-input-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 20px 0;
+        }
+        input[type="file"] {
+            display: none;
+        }
+        label {
+            background-color: #28a745;
+            color: white;
+            padding: 10px 40px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+            max-width: 300px; 
+            text-align: center;
+        }
+        #fileName {
+            margin-top: 10px;
+            font-family: Arial, sans-serif;
+            font-size: 16px;
+            color: black;
+        }
+        #output {
+            text-align: left;
+            white-space: pre-wrap;
+            background-color: #f9f9f9;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin-top: 20px;
+            font-family: monospace;
+        }
+        .error {
+            color: red;
+        }
+        .collapsible {
+            background-color: #777;
+            color: white;
+            cursor: pointer;
+            padding: 10px;
+            width: 100%;
+            border: none;
+            text-align: left;
+            outline: none;
+            font-size: 15px;
+            border-radius: 5px;
+            margin-top: 5px;
+        }
+        .collapsible:after {
+            content: '\002B';
+            color: white;
+            font-weight: bold;
+            float: right;
+            margin-left: 5px;
+        }
+        .active:after {
+            content: "\2212";
+        }
+        .content {
+            padding: 0 18px;
+            display: none;
+            overflow: hidden;
+            background-color: #f1f1f1;
+            margin-bottom: 10px;
+            border-radius: 5px;
+        }
+        /* Bouton Menu en haut à gauche */
+        .menu-button {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: #28a745;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-size: 14px;
+            text-decoration: none;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.6.0/jszip.min.js"></script>
+</head>
+<body>
+    <a href="Scratch-Code-Conversion.html" class="menu-button">Menu</a>
+    <div class="container">
+        <h1>Scratch to Blueprint Converter</h1>
+        <div class="file-input-container">
+            <label for="fileInput">Choose a file</label>
+            <input type="file" id="fileInput">
+            <div id="fileName"></div>
+            <div id="error" class="error"></div>
+        </div>
+        <div id="output"></div>
+    </div>
+    <script>
+        document.getElementById('fileInput').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            const fileNameDisplay = document.getElementById('fileName');
+            const errorDiv = document.getElementById('error');
+            
+            // Clear previous error message and output
+            errorDiv.textContent = '';
+            fileNameDisplay.textContent = '';
+            document.getElementById('output').innerHTML = '';
+
+            // Check file extension
+            if (file && file.name.endsWith('.sb3')) {
+                fileNameDisplay.textContent = file.name;
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const zip = new JSZip();
+                    zip.loadAsync(e.target.result).then(function(contents) {
+                        return zip.file("project.json").async("string");
+                    }).then(function(jsonStr) {
+                        const scratchProject = JSON.parse(jsonStr);
+                        const outputDiv = document.getElementById('output');
+                        scratchProject.targets.forEach(target => {
+                            if (target.isStage) return;
+                            const button = document.createElement('button');
+                            button.className = 'collapsible';
+                            button.textContent = target.name;
+                            const content = document.createElement('div');
+                            content.className = 'content';
+                            let firstBlock = true;
+                            Object.values(target.blocks).forEach(block => {
+                                if (firstBlock) {
+                                    firstBlock = false;
+                                } else if (['event_whenflagclicked', 'event_whenkeypressed', 'event_whenthisspriteclicked', 'event_whenbroadcastreceived'].includes(block.opcode)) {
+                                    content.innerHTML += '<br>'; // Ligne vide avant les blocks de type event
+                                }
+                                switch (block.opcode) {
+                                    // Events
+                                    case 'event_whenflagclicked':
+                                        content.innerHTML += 'Blueprint: Event BeginPlay<br>';
+                                        break;
+                                    case 'event_whenkeypressed':
+                                        content.innerHTML += 'Blueprint: Input Key Event<br>';
+                                        break;
+                                    case 'event_whenthisspriteclicked':
+                                        content.innerHTML += 'Blueprint: Event ActorClicked<br>';
+                                        break;
+                                    case 'event_whenbroadcastreceived':
+                                        content.innerHTML += 'Blueprint: Custom Event<br>';
+                                        break;
+                                    case 'event_broadcast':
+                                        content.innerHTML += 'Blueprint: Send Message<br>';
+                                        break;
+                                    case 'event_broadcastandwait':
+                                        content.innerHTML += 'Blueprint: Send Message and Wait<br>';
+                                        break;
+                                    
+                                    // Motion
+                                    case 'motion_movesteps':
+                                        content.innerHTML += 'Blueprint: Add Movement Input<br>';
+                                        break;
+                                    case 'motion_turnright':
+                                    case 'motion_turnleft':
+                                        content.innerHTML += 'Blueprint: Add Rotation Input<br>';
+                                        break;
+                                    case 'motion_goto':
+                                        content.innerHTML += 'Blueprint: Set Actor Location<br>';
+                                        break;
+                                    case 'motion_gotoxy':
+                                        content.innerHTML += 'Blueprint: Set Actor Location (X, Y)<br>';
+                                        break;
+                                    case 'motion_glideto':
+                                        content.innerHTML += 'Blueprint: Move to Target<br>';
+                                        break;
+                                    case 'motion_changexby':
+                                        content.innerHTML += 'Blueprint: Add X Input<br>';
+                                        break;
+                                    case 'motion_setx':
+                                        content.innerHTML += 'Blueprint: Set X Position<br>';
+                                        break;
+                                    case 'motion_changeyby':
+                                        content.innerHTML += 'Blueprint: Add Y Input<br>';
+                                        break;
+                                    case 'motion_sety':
+                                        content.innerHTML += 'Blueprint: Set Y Position<br>';
+                                        break;
+                                    case 'motion_ifonedgebounce':
+                                        content.innerHTML += 'Blueprint: Bounce on Edge<br>';
+                                        break;
+                                    
+                                    // Looks
+                                    case 'looks_changesizeby':
+                                        content.innerHTML += 'Blueprint: Change Actor Size<br>';
+                                        break;
+                                    case 'looks_show':
+                                        content.innerHTML += 'Blueprint: Set Actor Visibility (Show)<br>';
+                                        break;
+                                    case 'looks_hide':
+                                        content.innerHTML += 'Blueprint: Set Actor Visibility (Hide)<br>';
+                                        break;
+                                    case 'looks_switchcostumeto':
+                                        content.innerHTML += 'Blueprint: Set Material (for static mesh) / Set Skeletal Mesh (for characters)<br>';
+                                        break;
+                                    case 'looks_nextcostume':
+                                        content.innerHTML += 'Blueprint: Cycle through Materials / Meshes<br>';
+                                        break;
+                                    case 'looks_say':
+                                        content.innerHTML += 'Blueprint: Print String (Say)<br>';
+                                        break;
+                                    case 'looks_sayforsecs':
+                                        content.innerHTML += 'Blueprint: Print String with Delay<br>';
+                                        break;
+                                    
+                                    // Sound
+                                    case 'sound_play':
+                                        content.innerHTML += 'Blueprint: Play Sound<br>';
+                                        break;
+                                    case 'sound_playuntildone':
+                                        content.innerHTML += 'Blueprint: Play Sound Until Done<br>';
+                                        break;
+                                    case 'sound_stopallsounds':
+                                        content.innerHTML += 'Blueprint: Stop All Sounds<br>';
+                                        break;
+
+                                    // Control
+                                    case 'control_wait':
+                                        content.innerHTML += 'Blueprint: Delay<br>';
+                                        break;
+                                    case 'control_repeat':
+                                        content.innerHTML += 'Blueprint: For Loop<br>';
+                                        break;
+                                    case 'control_forever':
+                                        content.innerHTML += 'Blueprint: While Loop<br>';
+                                        break;
+                                    case 'control_if':
+                                        content.innerHTML += 'Blueprint: Branch (If Statement)<br>';
+                                        break;
+                                    case 'control_if_else':
+                                        content.innerHTML += 'Blueprint: Branch (If-Else Statement)<br>';
+                                        break;
+                                    case 'control_repeat_until':
+                                        content.innerHTML += 'Blueprint: Repeat Until<br>';
+                                        break;
+
+                                    // Sensing
+                                    case 'sensing_keypressed':
+                                        content.innerHTML += 'Blueprint: Is Input Key Pressed<br>';
+                                        break;
+                                    case 'sensing_mousedown':
+                                        content.innerHTML += 'Blueprint: Is Mouse Button Pressed<br>';
+                                        break;
+
+                                    // Operators
+                                    case 'operator_add':
+                                        content.innerHTML += 'Blueprint: Add<br>';
+                                        break;
+                                    case 'operator_subtract':
+                                        content.innerHTML += 'Blueprint: Subtract<br>';
+                                        break;
+                                    case 'operator_multiply':
+                                        content.innerHTML += 'Blueprint: Multiply<br>';
+                                        break;
+                                    case 'operator_divide':
+                                        content.innerHTML += 'Blueprint: Divide<br>';
+                                        break;
+                                    case 'operator_random':
+                                        content.innerHTML += 'Blueprint: Random Float in Range<br>';
+                                        break;
+                                    case 'operator_gt':
+                                        content.innerHTML += 'Blueprint: Greater Than<br>';
+                                        break;
+                                    case 'operator_lt':
+                                        content.innerHTML += 'Blueprint: Less Than<br>';
+                                        break;
+                                    case 'operator_and':
+                                        content.innerHTML += 'Blueprint: And<br>';
+                                        break;
+                                    case 'operator_or':
+                                        content.innerHTML += 'Blueprint: Or<br>';
+                                        break;
+                                    case 'operator_not':
+                                        content.innerHTML += 'Blueprint: Not<br>';
+                                        break;
+
+                                    // Variables
+                                    case 'data_setvariableto':
+                                        content.innerHTML += 'Blueprint: Set Variable<br>';
+                                        break;
+                                    case 'data_changevariableby':
+                                        content.innerHTML += 'Blueprint: Change Variable<br>';
+                                        break;
+
+                                    default:
+                                        content.innerHTML += `<span class="error">Block not recognized: ${block.opcode}</span><br>`;
+                                }
+                            });
+
+                            outputDiv.appendChild(button);
+                            outputDiv.appendChild(content);
+
+                            button.addEventListener('click', function() {
+                                this.classList.toggle('active');
+                                const content = this.nextElementSibling;
+                                if (content.style.display === "block") {
+                                    content.style.display = "none";
+                                } else {
+                                    content.style.display = "block";
+                                }
+                            });
+                        });
+                    }).catch(function(error) {
+                        errorDiv.textContent = 'Error reading the project file: ' + error.message;
+                    });
+                };
+                reader.readAsArrayBuffer(file);
+            } else {
+                errorDiv.textContent = 'Only .sb3 files are accepted';
+            }
+        });
+    </script>
+</body>
+</html>
